@@ -35,12 +35,6 @@ class SerialReader:
         self.pending_notifications = {}
     def _bg_thread(self):
         response = self.ffi_main.new('struct pull_queue_message *')
-        try:
-            val = os.nice(-20)
-            logging.info("%scurrent nice = %d" ,self.warn_prefix, val)
-        except:
-            logging.info("%snice process failed", self.warn_prefix)
-            pass
         while 1:
             self.ffi_lib.serialqueue_pull(self.serialqueue, response)
             count = response.len
@@ -142,9 +136,9 @@ class SerialReader:
                                         can_filters=filters,
                                         bustype='socketcan')
                 bus.send(set_id_msg)
-            except can.CanError as e:
-                logging.warn("%sUnable to open CAN port: %s",
-                             self.warn_prefix, e)
+            except (can.CanError, os.error, IOError) as e:
+                logging.warning("%sUnable to open CAN port: %s",
+                                self.warn_prefix, e)
                 self.reactor.pause(self.reactor.monotonic() + 5.)
                 continue
             bus.close = bus.shutdown # XXX
@@ -172,7 +166,8 @@ class SerialReader:
             try:
                 fd = os.open(filename, os.O_RDWR | os.O_NOCTTY)
             except OSError as e:
-                logging.warn("%sUnable to open port: %s", self.warn_prefix, e)
+                logging.warning("%sUnable to open port: %s",
+                                self.warn_prefix, e)
                 self.reactor.pause(self.reactor.monotonic() + 5.)
                 continue
             serial_dev = os.fdopen(fd, 'rb+', 0)
@@ -184,15 +179,8 @@ class SerialReader:
         logging.info("%sStarting serial connect", self.warn_prefix)
         start_time = self.reactor.monotonic()
         while 1:
-            if self.reactor.monotonic() > start_time + 50.:
-                key = 343
-                if "'mcu'" in self.warn_prefix:
-                    key = 343
-                elif "'nozzle_mcu'" in self.warn_prefix:
-                    key = 344
-                elif "'leveling_mcu'" in self.warn_prefix:
-                    key = 345
-                raise error("""{"code": "key%s", "msg": "Unable to connect %s", "values":["%s"]}""" % (key, self.warn_prefix, self.warn_prefix))
+            if self.reactor.monotonic() > start_time + 90.:
+                self._error("Unable to connect")
             try:
                 serial_dev = serial.Serial(baudrate=baud, timeout=0,
                                            exclusive=True)
@@ -200,7 +188,7 @@ class SerialReader:
                 serial_dev.rts = rts
                 serial_dev.open()
             except (OSError, IOError, serial.SerialException) as e:
-                logging.warn("%sUnable to open serial port: %s",
+                logging.warning("%sUnable to open serial port: %s",
                              self.warn_prefix, e)
                 self.reactor.pause(self.reactor.monotonic() + 5.)
                 continue
@@ -239,6 +227,8 @@ class SerialReader:
         return self.reactor
     def get_msgparser(self):
         return self.msgparser
+    def get_serialqueue(self):
+        return self.serialqueue
     def get_default_command_queue(self):
         return self.default_cmd_queue
     # Serial response callbacks
@@ -302,13 +292,13 @@ class SerialReader:
         logging.debug("%sUnknown message %d (len %d) while identifying",
                       self.warn_prefix, params['#msgid'], len(params['#msg']))
     def handle_unknown(self, params):
-        logging.warn("%sUnknown message type %d: %s",
+        logging.warning("%sUnknown message type %d: %s",
                      self.warn_prefix, params['#msgid'], repr(params['#msg']))
     def handle_output(self, params):
         logging.info("%s%s: %s", self.warn_prefix,
                      params['#name'], params['#msg'])
     def handle_default(self, params):
-        logging.warn("%sgot %s", self.warn_prefix, params)
+        logging.warning("%sgot %s", self.warn_prefix, params)
 
 # Class to send a query command and return the received response
 class SerialRetryCommand:

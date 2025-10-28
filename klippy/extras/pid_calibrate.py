@@ -34,7 +34,7 @@ class PIDCalibrate:
         if write_file:
             calibrate.write_file('/tmp/heattest.txt')
         if calibrate.check_busy(0., 0., 0.):
-            raise gcmd.error('{"code": "key7", "msg": "pid_calibrate interrupted"}')
+            raise gcmd.error("pid_calibrate interrupted")
         # Log and report results
         Kp, Ki, Kd = calibrate.calc_final_pid()
         logging.info("Autotune: final: Kp=%f Ki=%f Kd=%f", Kp, Ki, Kd)
@@ -43,11 +43,12 @@ class PIDCalibrate:
             "The SAVE_CONFIG command will update the printer config file\n"
             "with these parameters and restart the printer." % (Kp, Ki, Kd))
         # Store results for SAVE_CONFIG
+        cfgname = heater.get_name()
         configfile = self.printer.lookup_object('configfile')
-        configfile.set(heater_name, 'control', 'pid')
-        configfile.set(heater_name, 'pid_Kp', "%.3f" % (Kp,))
-        configfile.set(heater_name, 'pid_Ki', "%.3f" % (Ki,))
-        configfile.set(heater_name, 'pid_Kd', "%.3f" % (Kd,))
+        configfile.set(cfgname, 'control', 'pid')
+        configfile.set(cfgname, 'pid_Kp', "%.3f" % (Kp,))
+        configfile.set(cfgname, 'pid_Ki', "%.3f" % (Ki,))
+        configfile.set(cfgname, 'pid_Kd', "%.3f" % (Kd,))
 
 TUNE_PID_DELTA = 5.0
 
